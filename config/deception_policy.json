@@ -1,0 +1,11 @@
+{
+  "_comment": "Mirage deception policy. clinical_allowlist: session_ids or user_ids exempt from deception (real clinicians). safe_vlans: networks where deception never fires unless contradiction_flags are present.",
+  "deception_enabled": true,
+  "activation_threshold": 0.55,
+  "full_decoy_threshold": 0.75,
+  "noise_epsilon": 2.0,
+  "clinical_allowlist": [],
+  "safe_vlans": ["clinical"],
+  "jitter_base_ms": 50,
+  "jitter_max_ms": 200
+}

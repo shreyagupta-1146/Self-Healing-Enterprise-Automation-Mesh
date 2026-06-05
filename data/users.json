@@ -1,0 +1,56 @@
+{
+  "admin": {
+    "password": "sentinel2026",
+    "role": "admin",
+    "status": "approved",
+    "access_code": null
+  },
+  "test_doctor": {
+    "password": "password123",
+    "role": "user",
+    "status": "rejected",
+    "access_code": null
+  },
+  "Riya": {
+    "password": "Riya@1234",
+    "role": "user",
+    "status": "approved",
+    "access_code": "817665"
+  },
+  "testuser": {
+    "password": "pass123",
+    "role": "user",
+    "status": "rejected",
+    "access_code": null
+  },
+  "xyz": {
+    "password": "pass123",
+    "role": "user",
+    "status": "approved",
+    "access_code": "393069"
+  },
+  "riya": {
+    "password": "riya1234",
+    "role": "user",
+    "status": "approved",
+    "access_code": "316081"
+  },
+  "riya1234": {
+    "password": "riya1234",
+    "role": "user",
+    "status": "approved",
+    "access_code": "989009"
+  },
+  "shreyagupta1146@gmail.com": {
+    "password": "Shreya1$",
+    "role": "user",
+    "status": "approved",
+    "access_code": "788007"
+  },
+  "chakradhar Kudupudi": {
+    "password": "0assword",
+    "role": "user",
+    "status": "approved",
+    "access_code": "126483"
+  }
+}

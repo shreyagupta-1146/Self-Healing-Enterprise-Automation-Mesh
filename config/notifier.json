@@ -1,0 +1,36 @@
+{
+  "_comment": "backend: 'telegram' | 'local_smtp' | 'aegis' | 'console'. Change 'backend' to switch the active channel.",
+  "backend": "telegram",
+  "telegram": {
+    "bot_token_env": "TELEGRAM_BOT_TOKEN",
+    "chat_id_env": "TELEGRAM_CHAT_ID"
+  },
+  "local_smtp": {
+    "_comment": "Requires a local Postfix (SMTP) + Dovecot (IMAP) setup. No cloud endpoints.",
+    "smtp_host": "localhost",
+    "smtp_port": 25,
+    "smtp_from": "sentinel@localhost",
+    "smtp_to": "admin@localhost",
+    "smtp_user": "",
+    "smtp_password_env": "SMTP_PASSWORD",
+    "imap_host": "localhost",
+    "imap_port": 993,
+    "imap_user": "admin",
+    "imap_password_env": "IMAP_PASSWORD",
+    "imap_mailbox": "INBOX",
+    "poll_interval_sec": 5
+  },
+  "aegis": {
+    "broker_host": "localhost",
+    "broker_port": 8883,
+    "ca_cert": "certs/ca.crt",
+    "client_cert": "certs/sentinel.crt",
+    "client_key": "certs/sentinel.key",
+    "smtp_host": "localhost",
+    "smtp_port": 25,
+    "smtp_to": "oncall@hospital.internal",
+    "sip_uri": "sip:oncall@pbx.hospital.internal",
+    "device_keys_dir": "config/aegis_keys"
+  }
+}
+

@@ -1,8 +1,37 @@
+# Python
 .venv/
 __pycache__/
-logs/*.log
-logs/*.jsonl
+*.pyc
+*.pyo
+*.pyd
+
+# Secrets — NEVER commit these
+config/.chain_key
+.env
+*.env
+
+# macOS
+.DS_Store
+
+# Runtime logs & data (generated at runtime)
+logs/
 data/snapshots/
+data/audit_chain.json
+data/audit_chain_backup.json
+data/audit_chain_pre_hardening.json
+data/audit_chain.json.tmp
+retraining/retraining_queue.json
 *.db
-live_sentinel.py
+
+# Node / frontend build
 webapp/node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.next/
+frontend_backup.zip
+
+# ML model backups (keep trained models, skip backups)
+models/backup_*/
+
+# Context / scratch
+context/

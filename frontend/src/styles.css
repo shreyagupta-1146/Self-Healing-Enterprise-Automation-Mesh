@@ -1,0 +1,168 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warn: var(--warn);
+  --color-alert: var(--alert);
+  --color-sentinel: var(--sentinel);
+  --color-sentinel-bright: var(--sentinel-bright);
+
+  /* Tier severity colors */
+  --color-tier-high:   var(--tier-high);
+  --color-tier-medium: var(--tier-medium);
+  --color-tier-low:    var(--tier-low);
+
+  /* Status / action colors */
+  --color-status-normal:   var(--status-normal);
+  --color-status-threat:   var(--status-threat);
+  --color-status-lockdown: var(--status-lockdown);
+  --color-action-pending:  var(--action-pending);
+  --color-action-resolved: var(--action-resolved);
+  --color-action-locked:   var(--action-locked);
+  --color-action-forensics: var(--action-forensics);
+  --color-action-denied:   var(--action-denied);
+
+  /* Brand */
+  --color-brand:      var(--brand);
+  --color-brand-soft: var(--brand-soft);
+}
+
+:root {
+  --radius: 0.75rem;
+  /* Sentinel palette */
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.205 0.02 264);            /* #111827 */
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.205 0.02 264);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.205 0.02 264);
+  --primary: oklch(0.65 0.2 245);                 /* sentinel blue */
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.97 0.005 247);
+  --secondary-foreground: oklch(0.205 0.02 264);
+  --muted: oklch(0.97 0.005 247);
+  --muted-foreground: oklch(0.55 0.02 257);       /* #6B7280 */
+  --accent: oklch(0.96 0.02 240);
+  --accent-foreground: oklch(0.205 0.02 264);
+  --destructive: oklch(0.6 0.23 25);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.92 0.005 250);                /* #E5E7EB */
+  --input: oklch(0.88 0.005 250);                 /* #D1D5DB */
+  --ring: oklch(0.65 0.2 245);
+
+  --sentinel: oklch(0.65 0.2 245);                /* #1E90FF */
+  --sentinel-bright: oklch(0.7 0.18 230);         /* #0EA5E9 */
+  --success: oklch(0.72 0.18 150);                /* #22C55E */
+  --warn: oklch(0.75 0.16 65);                    /* orange */
+  --alert: oklch(0.62 0.24 25);                   /* red */
+
+  /* Tier severity: red / yellow / green */
+  --tier-high:   oklch(0.62 0.24 25);             /* vivid red   */
+  --tier-medium: oklch(0.78 0.17 75);             /* warm yellow */
+  --tier-low:    oklch(0.72 0.18 150);            /* green       */
+
+  /* System status */
+  --status-normal:   oklch(0.72 0.18 150);        /* green  */
+  --status-threat:   oklch(0.62 0.24 25);         /* red    */
+  --status-lockdown: oklch(0.72 0.18 55);         /* orange */
+
+  /* Action states */
+  --action-pending:   oklch(0.62 0.24 25);        /* red    */
+  --action-resolved:  oklch(0.72 0.18 150);       /* green  */
+  --action-locked:    oklch(0.72 0.18 55);        /* orange */
+  --action-forensics: oklch(0.65 0.2 245);        /* blue   */
+  --action-denied:    oklch(0.62 0.24 25);        /* red    */
+
+  /* Brand alias */
+  --brand:      oklch(0.65 0.2 245);
+  --brand-soft: oklch(0.95 0.02 245);
+
+  --gradient-sentinel: linear-gradient(135deg, #1E90FF 0%, #0EA5E9 100%);
+  --shadow-card: 0 20px 60px rgba(15, 23, 42, 0.08);
+  --shadow-glow: 0 10px 30px -8px rgba(30, 144, 255, 0.55);
+  --shadow-input-focus: 0 0 0 4px rgba(30, 144, 255, 0.12);
+}
+
+@layer base {
+  * { border-color: var(--color-border); }
+  html, body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer utilities {
+  .font-mono { font-family: var(--font-mono); }
+
+  .bg-gradient-sentinel { background: var(--gradient-sentinel); }
+  .shadow-card { box-shadow: var(--shadow-card); }
+  .shadow-glow { box-shadow: var(--shadow-glow); }
+
+  .btn-shimmer {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .btn-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(120deg, transparent 20%, rgba(255,255,255,0.45) 50%, transparent 80%);
+    transform: translateX(-120%);
+    transition: transform 0.9s ease;
+  }
+  .btn-shimmer:hover::after { transform: translateX(120%); }
+
+  .focus-sentinel:focus {
+    outline: none;
+    border-color: var(--sentinel);
+    box-shadow: var(--shadow-input-focus);
+  }
+
+  @keyframes node-pulse {
+    0%, 100% { opacity: 0.35; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.4); }
+  }
+  .animate-node { animation: node-pulse 3.4s ease-in-out infinite; }
+
+  @keyframes status-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55); }
+    50% { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
+  }
+  .animate-status { animation: status-pulse 2s ease-out infinite; }
+}
