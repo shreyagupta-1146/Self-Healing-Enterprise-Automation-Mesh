@@ -46,7 +46,7 @@ class TelegramNotifier(Notifier):
         if prompt:
             self.send_alert(prompt)
 
-        logger.info("[Aegis/Telegram] Waiting for admin reply...")
+        logger.info("[Telegram] Waiting for admin reply...")
 
         url = f"{self._base_url}/getUpdates"
         try:

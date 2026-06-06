@@ -105,6 +105,8 @@ if __name__ == '__main__':
         np.random.seed(42)
         random.seed(42)
         X, y = generate_dataset(n_samples, pct)
+        # Reorder to match model_trainer.py feature order:
+        X = X[:, [0, 1, 3, 2, 5, 4, 6, 7]]
         
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
         
@@ -224,6 +226,8 @@ if __name__ == '__main__':
         y_stress.append(2)
     
     X_stress = np.array(X_stress)
+    # Reorder to match model_trainer.py feature order:
+    X_stress = X_stress[:, [0, 1, 3, 2, 5, 4, 6, 7]]
     y_stress = np.array(y_stress)
     
     stress_ensemble_probs = np.zeros((len(y_stress), 3))

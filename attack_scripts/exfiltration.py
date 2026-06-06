@@ -7,20 +7,38 @@ from datetime import datetime, timezone
 
 # Get the absolute path to the project root logs directory
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-try:
-    from faker import Faker
-    _faker = Faker()
-except ImportError:
-    import subprocess
-    import sys
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "faker"])
-    from faker import Faker
-    _faker = Faker()
-ATTACKER_IP_LOW    = _faker.ipv4_public()
-ATTACKER_IP_MEDIUM = _faker.ipv4_public()
-HIGH_IPS           = [_faker.ipv4_public() for _ in range(3)]
+# ── unique random public IPv4 generator (pure stdlib — no Faker) ──────────────
+def _make_public_ips(n: int) -> list:
+    seen, ips = set(), []
+    while len(ips) < n:
+        a = random.randint(1, 223)
+        b = random.randint(0, 255)
+        c = random.randint(0, 255)
+        d = random.randint(1, 254)
+        if a == 10: continue
+        if a == 127: continue
+        if a == 169 and b == 254: continue
+        if a == 172 and 16 <= b <= 31: continue
+        if a == 192 and b == 168: continue
+        if a == 192 and b == 0: continue
+        if a == 198 and b in (18, 19): continue
+        if a == 198 and b == 51 and c == 100: continue
+        if a == 203 and b == 0 and c == 113: continue
+        ip = f"{a}.{b}.{c}.{d}"
+        if ip in seen: continue
+        seen.add(ip)
+        ips.append(ip)
+    return ips
 
-print(f"[*] Simulated IPs — Low:{ATTACKER_IP_LOW} Medium:{ATTACKER_IP_MEDIUM} High:{', '.join(HIGH_IPS)}")
+_EVENT_IPS  = _make_public_ips(15)
+_ip_counter = [0]
+
+def _next_ip() -> str:
+    ip = _EVENT_IPS[_ip_counter[0] % len(_EVENT_IPS)]
+    _ip_counter[0] += 1
+    return ip
+
+print(f"[*] Starting Multi-Phase Exfiltration Simulator — {len(_EVENT_IPS)} unique source IPs pre-generated")
 
 log_file = os.path.join(project_root, 'logs', 'events.jsonl')
 os.makedirs(os.path.dirname(log_file), exist_ok=True)
@@ -67,6 +85,7 @@ with open(log_file, 'a') as f:
 
     print(f"\n>>> Initiating Unordered Multi-Tier Attack Burst ({len(events_to_generate)} events) <<<")
     for event_idx, phase in enumerate(events_to_generate):
+        src_ip = _next_ip()   # unique IP for this event
         if "Phase 1" in phase["name"]:
             failed_logins = random.randint(1, 4)
             ehr_access = random.randint(20, 40)
@@ -91,7 +110,8 @@ with open(log_file, 'a') as f:
             "event_id": str(uuid.uuid4()),
             "is_precomputed_feature": True,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "source_ip": ATTACKER_IP_LOW if "Phase 1" in phase["name"] else (ATTACKER_IP_MEDIUM if "Phase 2" in phase["name"] else random.choice(HIGH_IPS)), "ip_address": "::ffff:192.168.1.100", # simulated attacker IP
+            "source_ip": src_ip,
+            "ip_address": src_ip,
             "endpoint": "/patients",
             "response_time_ms": int(100 / max(req_rate, 0.1)),
             "status_code": 200,

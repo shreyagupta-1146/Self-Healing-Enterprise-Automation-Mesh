@@ -10,26 +10,29 @@ import hmac as _hmac
 from uuid import uuid4
 from datetime import datetime, timezone
 
+from _paths import THRESHOLDS_FILE, MODEL_MANIFEST, MODELS_DIR, CHAIN_KEY_FILE, CONFIG_DIR
+
 # Suppress sklearn feature-name UserWarnings (cosmetic noise — doesn't affect accuracy).
 warnings.filterwarnings("ignore", message="X has feature names")
 warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
 
 DEBUG = False
 
-if not os.path.exists('config/thresholds.json'):
-    with open('config/thresholds.json', 'w') as f:
+os.makedirs(CONFIG_DIR, exist_ok=True)
+if not os.path.exists(THRESHOLDS_FILE):
+    with open(THRESHOLDS_FILE, 'w') as f:
         json.dump({"low_medium_boundary": 0.3, "medium_high_boundary": 0.7}, f)
 
-assert os.path.exists('config/thresholds.json')
-THRESHOLDS = json.load(open('config/thresholds.json'))
+assert os.path.exists(THRESHOLDS_FILE)
+THRESHOLDS = json.load(open(THRESHOLDS_FILE))
 assert 'low_medium_boundary' in THRESHOLDS
 assert 'medium_high_boundary' in THRESHOLDS
 
 manifest = {}
-if os.path.exists('models/model_manifest.json'):
-    manifest = json.load(open('models/model_manifest.json'))
+if os.path.exists(MODEL_MANIFEST):
+    manifest = json.load(open(MODEL_MANIFEST))
     for name, expected_sha in manifest.items():
-        path = f'models/calibrated_{name}.pkl'
+        path = os.path.join(MODELS_DIR, f'calibrated_{name}.pkl')
         if os.path.exists(path):
             with open(path, 'rb') as f:
                 sha = hashlib.sha256(f.read()).hexdigest()
@@ -38,7 +41,7 @@ if os.path.exists('models/model_manifest.json'):
 
 # Persistent HMAC key — survives restarts so chain signatures remain verifiable.
 # Generated once and stored; delete config/.chain_key to rotate (invalidates old chain).
-_SECRET_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config', '.chain_key')
+_SECRET_PATH = CHAIN_KEY_FILE
 if os.path.exists(_SECRET_PATH):
     with open(_SECRET_PATH, 'rb') as _f:
         SESSION_SECRET: bytes = _f.read()
@@ -61,12 +64,23 @@ WEIGHTS = {'rf': 0.25, 'gb': 0.20, 'svm': 0.20, 'lr': 0.15, 'xgb': 0.20}
 
 models_cache = {}
 def load_models():
+    """Load calibrated models; skip any whose pickle is incompatible with the current
+    scikit-learn version (e.g. _loss module path changed across sklearn releases).
+    Missing or broken models fall back to the feature-intensity heuristic in score_event().
+    """
     if not models_cache:
         for name in WEIGHTS:
-            path = f'models/calibrated_{name}.pkl'
+            path = os.path.join(MODELS_DIR, f'calibrated_{name}.pkl')
             if os.path.exists(path):
-                with open(path, 'rb') as f:
-                    models_cache[name] = pickle.load(f)
+                try:
+                    with open(path, 'rb') as f:
+                        models_cache[name] = pickle.load(f)
+                except Exception as _e:
+                    warnings.warn(
+                        f"[scoring_matrix] Skipping model '{name}': {_e}. "
+                        "Run model_trainer.py to rebuild with current scikit-learn.",
+                        RuntimeWarning, stacklevel=2,
+                    )
 load_models()
 
 velocity_buffer = [0.1, 0.1, 0.1, 0.1, 0.1]

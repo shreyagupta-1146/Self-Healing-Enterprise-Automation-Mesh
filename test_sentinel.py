@@ -59,18 +59,19 @@ class TestSentinel(unittest.TestCase):
         resp = respond(res3)
         self.assertEqual(resp.get("status"), "HALTED_CORRUPTION")
 
-    @patch('live_sentinel.wait_for_telegram_approval')
-    @patch('live_sentinel.send_telegram_message')
-    def test_telegram_timeout_fallback(self, mock_send, mock_wait):
-        mock_wait.return_value = "TIMEOUT"
+    @patch('live_sentinel.get_notifier')
+    def test_telegram_timeout_fallback(self, mock_get_notifier):
+        mock_notifier = mock_get_notifier.return_value
+        mock_notifier.request_authorization.return_value = "TIMEOUT"
         
         features = {'failed_logins': 50, 'cpu_usage': 0.95, 'ehr_access_per_hour': 0, 'attack_type': 'brute_force', 'asset_type': 'workstation'}
         res = score_event(features)
         
         handle_high_tier_threat("1.2.3.4", features, res, "Test Alert")
         
-        mock_send.assert_called()
-        self.assertTrue(any("AUTO-ESCALATION" in str(call) for call in mock_send.call_args_list))
+        mock_notifier.send_summary.assert_called()
+        self.assertTrue(any("AUTO-ESCALATION" in str(call) for call in mock_notifier.send_summary.call_args_list))
+
 
 if __name__ == '__main__':
     unittest.main()

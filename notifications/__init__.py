@@ -1,9 +1,16 @@
 """
 Notification package — lazy singleton factory.
 
+Available backends (set "backend" in config/notifier.json):
+  "sentinel"    — SentinelNotifier (SSHA): self-hosted, zero-cloud, default.
+                  Alerts go to server console + logs/alert_queue.jsonl.
+                  Authorization challenges resolved via the admin dashboard.
+  "telegram"    — TelegramNotifier: legacy; requires TELEGRAM_BOT_TOKEN env var.
+  "console"     — ConsoleNotifier: stdout only; useful for unit tests.
+
 Usage (anywhere in the project):
     from notifications import get_notifier
-    get_notifier().send_alert("Critical threat on 10.0.0.1")
+    get_notifier().send_alert("Critical threat")
     result = get_notifier().request_authorization(None, timeout_sec=90)
 """
 
@@ -31,19 +38,23 @@ def get_notifier() -> "Notifier":
 
 def _build() -> "Notifier":
     config = _load_config()
-    backend = config.get("backend", "console").lower()
+    backend = config.get("backend", "sentinel").lower()
 
     if backend == "telegram":
         return _build_telegram(config.get("telegram", {}))
 
-    if backend == "local_smtp":
-        return _build_local_smtp(config.get("local_smtp", {}))
+    if backend == "sentinel":
+        return _build_sentinel(config.get("sentinel", {}))
 
-    if backend == "aegis":
-        return _build_aegis(config.get("aegis", {}))
+    # Any unknown value (including old "aegis" or "local_smtp") → SSHA
+    if backend not in ("console",):
+        logger.warning(
+            f"[Notifier] Unknown backend '{backend}' — defaulting to SentinelNotifier (SSHA)"
+        )
+        return _build_sentinel({})
 
-    # Fallback — safe for dev/test
-    logger.warning("[Notifier] No backend configured — using ConsoleNotifier")
+    # Explicit console (unit tests / CI)
+    logger.info("[Notifier] ConsoleNotifier active (explicit)")
     from .console import ConsoleNotifier
     return ConsoleNotifier()
 
@@ -60,38 +71,22 @@ def _load_config() -> dict:
         return {}
 
 
+def _build_sentinel(cfg: dict) -> "Notifier":
+    from .sentinel_notifier import SentinelNotifier
+    logger.info("[Notifier] SentinelNotifier (SSHA) active — zero-cloud, self-hosted")
+    return SentinelNotifier(cfg)
+
+
 def _build_telegram(cfg: dict) -> "Notifier":
     token = os.environ.get(cfg.get("bot_token_env", "TELEGRAM_BOT_TOKEN"), "").strip()
     chat_id = os.environ.get(cfg.get("chat_id_env", "TELEGRAM_CHAT_ID"), "").strip()
 
     if not token or not chat_id:
-        logger.warning("[Notifier] Telegram token/chat_id missing — falling back to ConsoleNotifier")
-        from .console import ConsoleNotifier
-        return ConsoleNotifier()
+        logger.warning(
+            "[Notifier] Telegram credentials missing — falling back to SentinelNotifier (SSHA)"
+        )
+        return _build_sentinel({})
 
     from .telegram import TelegramNotifier
     logger.info("[Notifier] TelegramNotifier active")
     return TelegramNotifier(token, chat_id)
-
-
-def _build_local_smtp(cfg: dict) -> "Notifier":
-    from .local_smtp import LocalSMTPNotifier
-    logger.info(
-        f"[Notifier] LocalSMTPNotifier active "
-        f"(smtp={cfg.get('smtp_host','localhost')}:{cfg.get('smtp_port',25)} "
-        f"imap={cfg.get('imap_host','localhost')}:{cfg.get('imap_port',993)})"
-    )
-    return LocalSMTPNotifier(cfg)
-
-
-def _build_aegis(cfg: dict) -> "Notifier":
-    # Placeholder until Phase 1 is built — falls back to Console
-    # so the config can be set to "aegis" ahead of time without breaking anything.
-    try:
-        from .aegis import AegisNotifier
-        logger.info("[Notifier] AegisNotifier active")
-        return AegisNotifier(cfg)
-    except ImportError:
-        logger.warning("[Notifier] AegisNotifier not yet built — falling back to ConsoleNotifier")
-        from .console import ConsoleNotifier
-        return ConsoleNotifier()

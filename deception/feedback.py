@@ -24,10 +24,14 @@ import logging
 import os
 from datetime import datetime, timezone
 
-logger = logging.getLogger(__name__)
+import sys as _sys
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.dirname(_HERE)
+if _PROJECT_ROOT not in _sys.path:
+    _sys.path.insert(0, _PROJECT_ROOT)
+from _paths import MIRAGE_SESSIONS as _MIRAGE_SESSIONS_PATH, RETRAINING_QUEUE as _RETRAINING_QUEUE_PATH, RETRAINING_DIR
 
-_MIRAGE_SESSIONS_PATH = os.path.join("logs", "mirage_sessions.json")
-_RETRAINING_QUEUE_PATH = os.path.join("retraining", "retraining_queue.json")
+logger = logging.getLogger(__name__)
 
 
 def flush_mirage_labels():
@@ -48,7 +52,7 @@ def flush_mirage_labels():
         logger.error(f"[Feedback] Could not read mirage sessions: {e}")
         return
 
-    os.makedirs(os.path.dirname(_RETRAINING_QUEUE_PATH), exist_ok=True)
+    os.makedirs(RETRAINING_DIR, exist_ok=True)
     queue: list[dict] = []
     if os.path.exists(_RETRAINING_QUEUE_PATH):
         try:
@@ -102,7 +106,7 @@ def record_flagged_session(
     Write or update a session's Mirage status to logs/mirage_sessions.json.
     Called by live_sentinel.py whenever a session verdict is issued.
     """
-    os.makedirs(os.path.dirname(_MIRAGE_SESSIONS_PATH) or ".", exist_ok=True)
+    os.makedirs(os.path.dirname(_MIRAGE_SESSIONS_PATH), exist_ok=True)
     sessions: dict = {}
     if os.path.exists(_MIRAGE_SESSIONS_PATH):
         try:

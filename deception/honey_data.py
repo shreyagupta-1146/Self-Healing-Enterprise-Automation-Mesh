@@ -25,9 +25,14 @@ import string
 import time
 from datetime import datetime, date, timedelta, timezone
 
-logger = logging.getLogger(__name__)
+import sys as _sys
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.dirname(_HERE)
+if _PROJECT_ROOT not in _sys.path:
+    _sys.path.insert(0, _PROJECT_ROOT)
+from _paths import CANARY_LOG as _CANARY_LOG
 
-_CANARY_LOG = os.path.join("logs", "canary_registry.jsonl")
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Synthetic name / data pools (no real PHI — purely fictional)
@@ -72,7 +77,7 @@ def mint_canary(session_id: str, endpoint: str, canary_id: str = "") -> str:
         canary_id = f"canary_{secrets.token_hex(8)}"
     token = canary_id
 
-    os.makedirs(os.path.dirname(_CANARY_LOG) or ".", exist_ok=True)
+    os.makedirs(os.path.dirname(_CANARY_LOG), exist_ok=True)
     entry = {
         "canary_id": token,
         "issued_at": datetime.now(timezone.utc).isoformat(),

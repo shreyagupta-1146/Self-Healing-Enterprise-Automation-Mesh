@@ -252,9 +252,9 @@ type Stage = "login" | "otp" | "granted" | "suspended";function LoginPage() {
           setLoginUsername(adminId.trim());
           setIsAdminFlow(data.is_admin);
           setStage("otp");
-          
+
           if (data.is_admin) {
-            pushLog("WARN", "Risk-adaptive MFA: Dynamic OTP sent to Telegram.");
+            pushLog("WARN", "Risk-adaptive MFA: Dynamic OTP written to logs/logs_dashboard.txt (SSHA).");
           } else {
             pushLog("INFO", "Approved context. Enter static access code.");
           }
@@ -457,7 +457,7 @@ type Stage = "login" | "otp" | "granted" | "suspended";function LoginPage() {
               key="otp"
               username={loginUsername}
               isAdmin={isAdminFlow}
-              onSuccess={(token) => {
+              onSuccess={(token, isAdmin) => {
                 appendEmergencyAudit({
                   type: "Emergency Access",
                   timestamp: auditNow(),
@@ -467,6 +467,7 @@ type Stage = "login" | "otp" | "granted" | "suspended";function LoginPage() {
                 pushLog("INFO", "Emergency verification succeeded. Session recorded in audit chain.");
                 setStage("granted");
                 sessionStorage.setItem("auth_token", token);
+                sessionStorage.setItem("is_admin", isAdmin ? "1" : "0");
                 sessionStorage.setItem(SESSION_KNOWN_IP_KEY, CURRENT_IP);
                 setTimeout(() => router.navigate({ to: "/dashboard" }), 2000);
               }}
@@ -596,7 +597,7 @@ function EmergencyOtpCard({
   username,
   isAdmin,
 }: {
-  onSuccess: (token: string) => void;
+  onSuccess: (token: string, isAdmin: boolean) => void;
   onLockout: () => void;
   username: string;
   isAdmin: boolean;
@@ -622,7 +623,7 @@ function EmergencyOtpCard({
       setVerifying(false);
 
       if (response.ok && data.success) {
-        onSuccess(data.token);
+        onSuccess(data.token, !!data.is_admin);
         return;
       }
 
@@ -659,8 +660,8 @@ function EmergencyOtpCard({
           {isAdmin ? "Admin MFA Verification" : "User Security Verification"}
         </h1>
         <p className="mt-1.5 max-w-sm text-[13px] text-muted-foreground">
-          {isAdmin 
-            ? "A dynamic verification code has been dispatched to your Telegram." 
+          {isAdmin
+            ? "A dynamic OTP has been generated on the server console (on-prem, zero-cloud)."
             : "Please enter the static access code assigned by the administrator."}
         </p>
       </div>
@@ -710,8 +711,8 @@ function EmergencyOtpCard({
 
       <div className="mt-6 space-y-2 text-center">
         <p className="text-[12.5px] text-foreground/80">
-          {isAdmin 
-            ? "Check your registered Telegram for the dynamic OTP." 
+          {isAdmin
+            ? "Check logs/logs_dashboard.txt for the dynamic OTP — no external service required."
             : "Use the code assigned to you when your account was approved."}
         </p>
         <p className="text-[11.5px] text-muted-foreground">

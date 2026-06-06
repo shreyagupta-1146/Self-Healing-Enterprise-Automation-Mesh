@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 import hmac as _hmac
 import hashlib
 import shutil
@@ -7,6 +8,17 @@ import threading
 import time
 from datetime import datetime, timezone
 
+# Ensure project root is on sys.path for sibling module imports.
+_PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+
+from _paths import (
+    DATA_DIR, AUDIT_CHAIN, APP_DB, SNAPSHOTS_DIR,
+    LOGS_DIR, BLOCKED_IPS, LOCKED_ACCOUNTS,
+    INTEGRITY_ALERTS, TAMPER_ALERTS, NETWORK_ACTIONS,
+    RETRAINING_DIR, RETRAINING_QUEUE, p as _p,
+)
 from scoring_matrix import SESSION_SECRET
 from notifications import get_notifier
 
@@ -19,11 +31,11 @@ assert CRITICAL_SEGMENTS == []
 
 
 # ---------------------------------------------------------------------------
-# Genesis bootstrap — create audit_chain.json on startup if absent
+# Genesis bootstrap -- create audit_chain.json on startup if absent
 # ---------------------------------------------------------------------------
 def _bootstrap_chain():
-    os.makedirs('data', exist_ok=True)
-    if not os.path.exists('data/audit_chain.json'):
+    os.makedirs(DATA_DIR, exist_ok=True)
+    if not os.path.exists(AUDIT_CHAIN):
         genesis_data = {"block_index": 0}
         genesis_str  = json.dumps(genesis_data, sort_keys=True)
         genesis = {
@@ -31,11 +43,11 @@ def _bootstrap_chain():
             "entry_hash":  hashlib.sha256(b"genesis").hexdigest(),
             "block_hmac":  _hmac.new(SESSION_SECRET, genesis_str.encode(), hashlib.sha256).hexdigest(),
         }
-        tmp = 'data/audit_chain.json.tmp'
+        tmp = AUDIT_CHAIN + '.tmp'
         with open(tmp, 'w') as f:
             json.dump([genesis], f, indent=2)
-        os.replace(tmp, 'data/audit_chain.json')
-        print("[CHAIN] Hardened genesis block created → data/audit_chain.json")
+        os.replace(tmp, AUDIT_CHAIN)
+        print(f"[CHAIN] Hardened genesis block created -> {AUDIT_CHAIN}")
 
 _bootstrap_chain()
 
@@ -45,13 +57,13 @@ _bootstrap_chain()
 # ---------------------------------------------------------------------------
 
 def _integrity_alert(msg: str):
-    """Print, log, and write tamper alert — used by watchdog and sync check."""
+    """Print, log, and write tamper alert -- used by watchdog and sync check."""
     print(f"\033[91m[CHAIN ALERT] {msg}\033[0m")
     ts = datetime.now(timezone.utc).isoformat()
-    os.makedirs('logs', exist_ok=True)
-    for path in ('logs/integrity_alerts.log', 'logs/tamper_alerts.log'):
+    os.makedirs(LOGS_DIR, exist_ok=True)
+    for path in (INTEGRITY_ALERTS, TAMPER_ALERTS):
         with open(path, 'a') as f:
-            f.write(f"{ts} — {msg}\n")
+            f.write(f"{ts} -- {msg}\n")
 
 
 def _block_hmac(entry: dict, secret: bytes) -> str:
@@ -60,8 +72,10 @@ def _block_hmac(entry: dict, secret: bytes) -> str:
     return _hmac.new(secret, json.dumps(payload, sort_keys=True).encode(), hashlib.sha256).hexdigest()
 
 
-def _write_chain_atomic(chain: list, path: str = 'data/audit_chain.json'):
-    """Write chain atomically via temp file + rename — prevents partial-write corruption."""
+def _write_chain_atomic(chain: list, path: str = None):
+    if path is None:
+        path = AUDIT_CHAIN
+    """Write chain atomically via temp file + rename -- prevents partial-write corruption."""
     tmp = path + '.tmp'
     with open(tmp, 'w') as f:
         json.dump(chain, f, indent=2)
@@ -71,44 +85,44 @@ def _write_chain_atomic(chain: list, path: str = 'data/audit_chain.json'):
 def verify_chain_integrity() -> bool:
     """
     Three-layer chain verification:
-      1. Block index continuity  → detects insertion or deletion
-      2. SHA-256 hash linkage    → detects any hash flip
-      3. HMAC-SHA256 signature   → detects content injection even with valid hash
+      1. Block index continuity  -> detects insertion or deletion
+      2. SHA-256 hash linkage    -> detects any hash flip
+      3. HMAC-SHA256 signature   -> detects content injection even with valid hash
     Returns True if intact, False if tampered (and fires alert).
     """
-    if not os.path.exists('data/audit_chain.json'):
+    if not os.path.exists(AUDIT_CHAIN):
         return True
     try:
-        with open('data/audit_chain.json', 'r') as f:
+        with open(AUDIT_CHAIN, 'r') as f:
             chain = json.load(f)
 
         for i, entry in enumerate(chain[1:], 1):
-            # Layer 1 — Block index continuity
+            # Layer 1 -- Block index continuity
             if entry.get('block_index') is not None and entry['block_index'] != i:
                 _integrity_alert(
                     f"BLOCK INDEX MISMATCH at position {i}: "
                     f"expected {i}, got {entry.get('block_index')} "
-                    f"— insertion or deletion detected"
+                    f"-- insertion or deletion detected"
                 )
                 return False
 
-            # Layer 2 — SHA-256 hash linkage
+            # Layer 2 -- SHA-256 hash linkage
             prev_hash = chain[i - 1]['entry_hash']
             entry_for_hash = {k: v for k, v in entry.items() if k not in ('entry_hash', 'block_hmac')}
             expected_hash = hashlib.sha256(
                 (prev_hash + json.dumps(entry_for_hash, sort_keys=True)).encode()
             ).hexdigest()
             if entry['entry_hash'] != expected_hash:
-                _integrity_alert(f"HASH CHAIN BROKEN at block {i} — hash flip detected")
+                _integrity_alert(f"HASH CHAIN BROKEN at block {i} -- hash flip detected")
                 return False
 
-            # Layer 3 — HMAC content signature
+            # Layer 3 -- HMAC content signature
             if 'block_hmac' in entry:
                 expected_hmac = _block_hmac(entry, SESSION_SECRET)
                 if not _hmac.compare_digest(entry['block_hmac'], expected_hmac):
                     _integrity_alert(
                         f"HMAC SIGNATURE INVALID at block {i} "
-                        f"— content injection detected (block has valid hash but wrong HMAC)"
+                        f"-- content injection detected (block has valid hash but wrong HMAC)"
                     )
                     return False
 
@@ -131,41 +145,42 @@ threading.Thread(target=_watchdog, daemon=True).start()
 # ---------------------------------------------------------------------------
 
 def throttle_bandwidth(percent=1):
-    with open('logs/network_actions.log', 'a') as f:
-        f.write(f"{datetime.now()} — Bandwidth throttled to {percent}%\n")
+    os.makedirs(LOGS_DIR, exist_ok=True)
+    with open(NETWORK_ACTIONS, 'a') as f:
+        f.write(f"{datetime.now()} -- Bandwidth throttled to {percent}%\n")
 
 
 def snapshot_database():
-    os.makedirs('data/snapshots', exist_ok=True)
-    if os.path.exists('data/app.db'):
-        shutil.copy('data/app.db', f'data/snapshots/snap_{int(time.time())}.db')
+    os.makedirs(SNAPSHOTS_DIR, exist_ok=True)
+    if os.path.exists(APP_DB):
+        shutil.copy(APP_DB, os.path.join(SNAPSHOTS_DIR, f'snap_{int(time.time())}.db'))
 
 
 def lock_account(user_id: str):
     locked = set()
-    if os.path.exists('logs/locked_accounts.json'):
-        with open('logs/locked_accounts.json', 'r') as f:
+    if os.path.exists(LOCKED_ACCOUNTS):
+        with open(LOCKED_ACCOUNTS, 'r') as f:
             for line in f:
                 if line.strip():
                     locked.add(json.loads(line)['user_id'])
     if user_id in locked:
         print(f"[*] Account {user_id} already locked.")
         return
-    with open('logs/locked_accounts.json', 'a') as f:
+    with open(LOCKED_ACCOUNTS, 'a') as f:
         f.write(json.dumps({"user_id": user_id, "time": datetime.now(timezone.utc).isoformat()}) + "\n")
 
 
 def block_ip(ip_address: str):
     blocked = set()
-    if os.path.exists('logs/blocked_ips.json'):
-        with open('logs/blocked_ips.json', 'r') as f:
+    if os.path.exists(BLOCKED_IPS):
+        with open(BLOCKED_IPS, 'r') as f:
             for line in f:
                 if line.strip():
                     blocked.add(json.loads(line)['ip'])
     if ip_address in blocked:
         print(f"[*] IP {ip_address} already blocked.")
         return
-    with open('logs/blocked_ips.json', 'a') as f:
+    with open(BLOCKED_IPS, 'a') as f:
         f.write(json.dumps({"ip": ip_address, "time": datetime.now(timezone.utc).isoformat()}) + "\n")
 
 
@@ -189,21 +204,22 @@ def respond(
     recomputed = _hmac.new(SESSION_SECRET, core.encode(), hashlib.sha256).hexdigest()
 
     if not _hmac.compare_digest(classification['hmac_token'], recomputed):
-        with open('logs/integrity_alerts.log', 'a') as f:
-            f.write(f"{datetime.now()} — INVALID HMAC — possible injection\n")
+        os.makedirs(LOGS_DIR, exist_ok=True)
+        with open(INTEGRITY_ALERTS, 'a') as f:
+            f.write(f"{datetime.now()} -- INVALID HMAC -- possible injection\n")
         return {"status": "REJECTED_INVALID_HMAC"}
 
     tier = classification['tier']
     event_id = classification['event_id']
 
     # --- Audit chain bootstrap ---
-    if not os.path.exists('data/audit_chain.json'):
-        os.makedirs('data', exist_ok=True)
+    if not os.path.exists(AUDIT_CHAIN):
+        os.makedirs(DATA_DIR, exist_ok=True)
         genesis = {"block_index": 0, "entry_hash": hashlib.sha256(b"genesis").hexdigest()}
         genesis["block_hmac"] = _block_hmac(genesis, SESSION_SECRET)
         _write_chain_atomic([genesis])
 
-    with open('data/audit_chain.json', 'r') as f:
+    with open(AUDIT_CHAIN, 'r') as f:
         chain = json.load(f)
     prev_hash = chain[-1]['entry_hash']
 
@@ -216,12 +232,12 @@ def respond(
             (verify_prev + json.dumps(last_for_hash, sort_keys=True)).encode()
         ).hexdigest()
         if expected_hash != prev_hash:
-            get_notifier().send_alert("CRITICAL: CHAIN_HASH_CORRUPTION — system halted")
+            get_notifier().send_alert("CRITICAL: CHAIN_HASH_CORRUPTION -- system halted")
             _integrity_alert("SYNCHRONOUS HASH CORRUPTION HALT")
             return {"status": "HALTED_CORRUPTION"}
         if 'block_hmac' in last:
             if not _hmac.compare_digest(last['block_hmac'], _block_hmac(last, SESSION_SECRET)):
-                get_notifier().send_alert("CRITICAL: BLOCK_HMAC_INVALID — content injection detected")
+                get_notifier().send_alert("CRITICAL: BLOCK_HMAC_INVALID -- content injection detected")
                 _integrity_alert("SYNCHRONOUS HMAC INJECTION HALT")
                 return {"status": "HALTED_INJECTION"}
 
@@ -288,7 +304,7 @@ def respond(
             if not classification.get('dedup_suppress'):
                 alert_msg = (
                     f"ATTACKER IP: {ip_address}\n"
-                    f"CRITICAL ALERT — CONTAINMENT ACTIVE\n"
+                    f"CRITICAL ALERT -- CONTAINMENT ACTIVE\n"
                     f"IP permanently blocked, bandwidth throttled to 1%, DB snapshotted.\n"
                     f"Authorize forensic report generation: reply YES"
                 )
@@ -307,15 +323,17 @@ def respond(
                         user_id = classification.get('features', {}).get('user_id', 'Unknown')
                         lock_account(user_id)
 
-                        with open(f'logs/forensic_report_{event_id}.json', 'w') as flog:
+                        forensic_path = _p("logs", f"forensic_report_{event_id}.json")
+                        with open(forensic_path, 'w') as flog:
                             json.dump(classification, flog)
 
-                        q_path = 'retraining/retraining_queue.json'
-                        os.makedirs('retraining', exist_ok=True)
+                        os.makedirs(RETRAINING_DIR, exist_ok=True)
+                        q_path = RETRAINING_QUEUE
                         if not os.path.exists(q_path):
                             with open(q_path, 'w') as fq:
                                 json.dump([], fq)
-                        queue = json.load(open(q_path))
+                        with open(q_path) as _fq:
+                            queue = json.load(_fq)
                         queue.append({
                             "incident_id": event_id,
                             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -325,11 +343,11 @@ def respond(
                             "human_confirmed": True,
                             "resolved_at": datetime.now(timezone.utc).isoformat(),
                         })
-                        with open(q_path, 'w') as fq:
-                            json.dump(queue, fq)
+                        with open(q_path, 'w') as _fq2:
+                            json.dump(queue, _fq2)
 
                         get_notifier().send_summary(
-                            "SYSTEM HELD IN CONTAINMENT — Forensic report generated — "
+                            "SYSTEM HELD IN CONTAINMENT -- Forensic report generated -- "
                             "Human team must restore services manually."
                         )
 
@@ -346,7 +364,7 @@ def respond(
 
                         total_events = live_sentinel.low_count + live_sentinel.medium_count + live_sentinel.high_count
                         if total_events == 0:
-                            print("[WARNING] Ghost session — zero events. Summary suppressed.")
+                            print("[WARNING] Ghost session -- zero events. Summary suppressed.")
                             return
 
                         get_notifier().send_summary(

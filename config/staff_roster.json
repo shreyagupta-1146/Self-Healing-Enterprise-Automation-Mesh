@@ -1,0 +1,58 @@
+[
+  {
+    "user_id": "dr_sharma",
+    "name": "Dr. Priya Sharma",
+    "department": "Cardiology",
+    "role": "Cardiologist",
+    "shift_start": "07:00",
+    "shift_end": "19:00"
+  },
+  {
+    "user_id": "dr_patel",
+    "name": "Dr. Arjun Patel",
+    "department": "ICU",
+    "role": "Intensivist",
+    "shift_start": "11:00",
+    "shift_end": "23:00"
+  },
+  {
+    "user_id": "nurse_divya",
+    "name": "Divya Krishnamurthy",
+    "department": "Oncology",
+    "role": "Nurse Practitioner",
+    "shift_start": "06:00",
+    "shift_end": "14:00"
+  },
+  {
+    "user_id": "tech_rajan",
+    "name": "Rajan Subramaniam",
+    "department": "IT Infrastructure",
+    "role": "Systems Technician",
+    "shift_start": "09:00",
+    "shift_end": "17:00"
+  },
+  {
+    "user_id": "admin_meena",
+    "name": "Meena Iyer",
+    "department": "Medical Records",
+    "role": "Records Administrator",
+    "shift_start": "08:00",
+    "shift_end": "16:00"
+  },
+  {
+    "user_id": "dr_fernandes",
+    "name": "Dr. Carlos Fernandes",
+    "department": "Emergency",
+    "role": "Emergency Physician",
+    "shift_start": "00:00",
+    "shift_end": "23:59"
+  },
+  {
+    "user_id": "pharmacist_anand",
+    "name": "Anand Venkatesh",
+    "department": "Pharmacy",
+    "role": "Clinical Pharmacist",
+    "shift_start": "08:30",
+    "shift_end": "20:30"
+  }
+]

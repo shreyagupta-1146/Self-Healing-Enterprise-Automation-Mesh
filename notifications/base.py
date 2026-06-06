@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 class Notifier(ABC):
     """
     Abstract notification + human-in-the-loop authorization channel.
-    Concrete backends: TelegramNotifier, ConsoleNotifier, AegisNotifier.
+    Concrete backends: TelegramNotifier, ConsoleNotifier, SentinelNotifier (SSHA).
     """
 
     @abstractmethod

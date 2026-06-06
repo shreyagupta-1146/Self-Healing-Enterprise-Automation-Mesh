@@ -55,6 +55,7 @@ def test_tiers():
     score_high = res_high['raw_score']
 
     # Constraint 4: Explicit bounds
-    assert score_low < 0.45, f"Low score too high: {score_low}"
-    assert 0.45 <= score_med < 0.75, f"Medium score out of range: {score_med}"
-    assert score_high >= 0.75, f"High score too low: {score_high}"
+    assert score_low < 0.30, f"Low score too high: {score_low}"
+    assert 0.30 <= score_med < 0.70, f"Medium score out of range: {score_med}"
+    assert score_high >= 0.70, f"High score too low: {score_high}"
+

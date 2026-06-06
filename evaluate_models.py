@@ -11,6 +11,8 @@ from generate_metrics import generate_dataset, generate_boundary_sample
 def evaluate():
     # Use the same data generation logic the models were trained on
     X, y = generate_dataset(n_samples=6295, boundary_pct=0.01)
+    # Reorder to match model_trainer.py feature order:
+    X = X[:, [0, 1, 3, 2, 5, 4, 6, 7]]
     
     # Use the exact same random state to get a consistent test split
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
@@ -41,6 +43,7 @@ def evaluate():
         X_boundary.append(generate_boundary_sample("H_edge"))
         y_boundary.append(2)
     X_boundary = np.array(X_boundary)
+    X_boundary = X_boundary[:, [0, 1, 3, 2, 5, 4, 6, 7]]
     y_boundary = np.array(y_boundary)
     # Add realistic sensor noise to boundary samples before AUC-ROC scoring.
     # Boundary regions have higher measurement uncertainty in real deployments;

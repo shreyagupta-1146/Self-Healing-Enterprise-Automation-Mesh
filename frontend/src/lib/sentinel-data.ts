@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export type Tier = "High" | "Medium" | "Low";
-export type Action = "pending" | "resolved" | "auto-locked" | "forensics_generated" | "denied";
+export type Action = "pending" | "resolved" | "auto-locked" | "forensics_generated" | "denied" | "blocked" | "admin_released";
 export type SystemStatus = "NORMAL" | "THREAT" | "LOCKDOWN";
 
 export interface ThreatEvent {
@@ -11,7 +11,8 @@ export interface ThreatEvent {
   tier: Tier;
   score: number;
   action: Action;
-  reason: string;
+  reason: string;       // plain_english_explanation from ML model
+  shap_url: string;     // /api/shap/<filename> — served behind auth gate
   lat: number;
   lng: number;
   country: string;
@@ -77,6 +78,7 @@ function reasonForTier(tier: Tier): string {
 
 function mapFlaskEvent(raw: {
   ip: string; tier: string; score: number; timestamp: string; action: string;
+  reason?: string; shap_url?: string;
 }, idx: number): ThreatEvent {
   const tier = raw.tier as Tier;
   const geo = geoForIP(raw.ip);
@@ -87,7 +89,9 @@ function mapFlaskEvent(raw: {
     tier,
     score: raw.score,
     action: raw.action as Action,
-    reason: reasonForTier(tier),
+    // Use real model explanation if present, fall back to tier-based label
+    reason: raw.reason || reasonForTier(tier),
+    shap_url: raw.shap_url || "",
     lat: geo.lat + (Math.random() - 0.5) * 0.8,
     lng: geo.lng + (Math.random() - 0.5) * 0.8,
     country: geo.country,
@@ -95,14 +99,14 @@ function mapFlaskEvent(raw: {
   };
 }
 
-function buildSnapshot(apiData: {
-  status: string;
-  blockchain_status: string;
-  blocked_count: number;
-  threats: { ip: string; tier: string; score: number; timestamp: string; action: string }[];
-}): SentinelSnapshot {
-  const recent = apiData.threats.map(mapFlaskEvent);
-  const feed = recent.slice(0, 8);
+/** Derive a full SentinelSnapshot from a flat list of already-mapped ThreatEvents. */
+function buildSnapshotFromEvents(
+  recent: ThreatEvent[],
+  status: SystemStatus,
+  ledger: "INTACT" | "COMPROMISED",
+  totalBlockedIPs: number,
+): SentinelSnapshot {
+  const feed    = recent.slice(0, 20);
   const blocked = recent.filter((e) => e.action === "auto-locked" || e.tier === "High");
 
   const tierCounts = { High: 0, Medium: 0, Low: 0, total: recent.length };
@@ -111,18 +115,18 @@ function buildSnapshot(apiData: {
   const riskSeries = recent
     .slice()
     .reverse()
+    .slice(-30)            // keep last 30 points so the chart stays readable
     .map((e) => ({ t: e.timestamp.slice(11, 16), score: e.score }));
 
-  // Find epoch of last High-tier event, or fall back to 14 min ago
   const lastHigh = recent.find((e) => e.tier === "High");
   const lastHighAt = lastHigh
     ? new Date(lastHigh.timestamp).getTime()
     : Date.now() - 14 * 60_000;
 
   return {
-    status: (apiData.status === "LOCKDOWN" ? "LOCKDOWN" : apiData.status === "THREAT" ? "THREAT" : "NORMAL") as SystemStatus,
-    ledger: apiData.blockchain_status === "INTACT" ? "INTACT" : "COMPROMISED",
-    totalBlockedIPs: apiData.blocked_count,
+    status,
+    ledger,
+    totalBlockedIPs,
     recent,
     feed,
     blocked,
@@ -132,6 +136,36 @@ function buildSnapshot(apiData: {
     totalIPsPlotted: recent.length,
     lastUpdated: new Date().toISOString().slice(11, 19),
   };
+}
+
+function buildSnapshot(apiData: {
+  status: string;
+  blockchain_status: string;
+  blocked_count: number;
+  total_threat_count?: number;
+  all_tier_counts?: { High: number; Medium: number; Low: number };
+  threats: { ip: string; tier: string; score: number; timestamp: string; action: string; reason?: string; shap_url?: string }[];
+}): SentinelSnapshot {
+  const recent = apiData.threats.map(mapFlaskEvent);
+  const status: SystemStatus =
+    apiData.status === "LOCKDOWN" ? "LOCKDOWN" :
+    apiData.status === "THREAT"   ? "THREAT"   : "NORMAL";
+  const ledger: "INTACT" | "COMPROMISED" =
+    apiData.blockchain_status === "INTACT" ? "INTACT" : "COMPROMISED";
+
+  const snap = buildSnapshotFromEvents(recent, status, ledger, apiData.blocked_count);
+
+  // Override tier counts with the real full-log totals from the backend
+  if (apiData.total_threat_count !== undefined && apiData.all_tier_counts) {
+    snap.tierCounts = {
+      High:   apiData.all_tier_counts.High,
+      Medium: apiData.all_tier_counts.Medium,
+      Low:    apiData.all_tier_counts.Low,
+      total:  apiData.total_threat_count,
+    };
+  }
+
+  return snap;
 }
 
 const FALLBACK: SentinelSnapshot = {
@@ -148,28 +182,105 @@ const FALLBACK: SentinelSnapshot = {
   lastUpdated: "--:--:--",
 };
 
-export function useSentinel(): SentinelSnapshot {
+function authHeaders(): HeadersInit {
+  const token = typeof window !== "undefined"
+    ? sessionStorage.getItem("auth_token") ?? ""
+    : "";
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+export function useSentinel(autoRefresh = true): SentinelSnapshot {
   const [snap, setSnap] = useState<SentinelSnapshot>(FALLBACK);
 
-  const fetchSnap = async () => {
+  // Keep a ref to the latest events so the SSE merger can read it without
+  // being in the dependency list (avoids re-subscribing on every update).
+  const snapRef = useRef<SentinelSnapshot>(FALLBACK);
+  snapRef.current = snap;
+
+  // ── Polling fallback: full snapshot from /api/status ────────────────────
+  const fetchSnap = useCallback(async () => {
     try {
-      const res = await fetch("/api/status");
+      const res = await fetch("/api/status", { headers: authHeaders() });
+      if (res.status === 401) {
+        if (typeof window !== "undefined") window.location.href = "/";
+        return;
+      }
       if (!res.ok) return;
       const data = await res.json();
       setSnap(buildSnapshot(data));
     } catch {
       // Flask offline — keep last known state
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchSnap();
+    if (!autoRefresh) return;
     const id = setInterval(fetchSnap, 5000);
     return () => clearInterval(id);
+  }, [autoRefresh, fetchSnap]);
+
+  // ── Real-time push: SSE threat_update events ────────────────────────────
+  // When live_sentinel.py writes a new scored threat to threat_log.json the
+  // backend tail-follows the file and pushes it here immediately — no poll lag.
+  useEffect(() => {
+    const token = typeof window !== "undefined"
+      ? sessionStorage.getItem("auth_token") ?? ""
+      : "";
+    if (!token) return;
+
+    const es = new EventSource(`/api/stream?token=${encodeURIComponent(token)}`);
+
+    es.addEventListener("threat_update", (e: MessageEvent) => {
+      try {
+        const raw = JSON.parse(e.data) as {
+          ip: string; tier: string; score: number;
+          timestamp: string; action: string;
+          reason?: string; shap_url?: string;
+        };
+        const incoming = mapFlaskEvent(raw, Date.now());
+        setSnap(prev => {
+          // Dedup by ip+timestamp to avoid double-counting
+          const key = `${raw.ip}-${raw.timestamp}`;
+          if (prev.recent.some(r => `${r.ip}-${r.timestamp}` === key)) return prev;
+
+          const newRecent = [incoming, ...prev.recent].slice(0, 100);
+
+          // Re-derive status: if there's any pending High, it's LOCKDOWN
+          const hasPending  = newRecent.some(r => r.action === "pending");
+          const hasAnyHigh  = newRecent.some(r => r.tier === "High");
+          const newStatus: SystemStatus = hasPending ? "LOCKDOWN" : hasAnyHigh ? "THREAT" : "NORMAL";
+
+          const newSnap = buildSnapshotFromEvents(
+            newRecent,
+            newStatus,
+            prev.ledger,
+            prev.totalBlockedIPs,
+          );
+
+          // Preserve the real running totals from the backend rather than
+          // rebuilding from the in-memory slice (which is capped at 100).
+          // Only increment — the next full poll will reconcile if needed.
+          newSnap.tierCounts = {
+            High:   prev.tierCounts.High   + (incoming.tier === "High"   ? 1 : 0),
+            Medium: prev.tierCounts.Medium + (incoming.tier === "Medium" ? 1 : 0),
+            Low:    prev.tierCounts.Low    + (incoming.tier === "Low"    ? 1 : 0),
+            total:  prev.tierCounts.total  + 1,
+          };
+
+          return newSnap;
+        });
+      } catch {}
+    });
+
+    es.onerror = () => {};   // suppress noise; reconnect is automatic
+    return () => es.close();
   }, []);
 
   return snap;
 }
+
+export { authHeaders };
 
 export function useMLMetrics(): MLMetricRow[] {
   const [rows, setRows] = useState<MLMetricRow[]>([]);
@@ -184,7 +295,7 @@ export function useMLMetrics(): MLMetricRow[] {
   };
 
   useEffect(() => {
-    fetch("/api/metrics")
+    fetch("/api/metrics", { headers: authHeaders() })
       .then((r) => r.json())
       .then((data: { model: string; accuracy: number; precision: number; recall: number; f1: number; auc_roc: number }[]) => {
         setRows(

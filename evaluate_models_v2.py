@@ -12,6 +12,9 @@ def evaluate():
     # Generate evaluation data mirroring the training logic
     # Use 2000 samples and 3% boundary injection to mirror training
     X_raw, y_raw = generate_dataset(2000, 0.03)
+    # Reorder to match model_trainer.py feature order:
+    X_raw = X_raw[:, [0, 1, 3, 2, 5, 4, 6, 7]]
+
     
     # Introduce real-world operational evaluation noise to prevent F1=1.00
     noise_scale = 0.15 # 15% noise scale for evaluation (test-time jitter)

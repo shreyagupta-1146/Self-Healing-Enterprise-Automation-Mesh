@@ -35,3 +35,16 @@ models/backup_*/
 
 # Context / scratch
 context/
+
+# Cryptographic runtime secrets
+config/pseudonym_salt.bin
+
+# Runtime state (auto-generated, changes every run)
+config/active_emergencies.json
+config/badge_events.json
+
+# Root-level runtime log files
+logs_dashboard.txt
+logs_frontend.txt
+logs_sentinel.txt
+logs_webapp.txt

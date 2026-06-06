@@ -1,6 +1,6 @@
 {
   "admin": {
-    "password": "sentinel2026",
+    "password": "pbkdf2:sha256:260000:1d4a287e7eea2247c1fb3d8c43fd2f3f:fbc04ce23896af7e679f070a4f80df8282da7f6285fcf17c1797bfef410bc5b3",
     "role": "admin",
     "status": "approved",
     "access_code": null
